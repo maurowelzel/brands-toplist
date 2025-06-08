@@ -1,48 +1,63 @@
+# Top Brands
 
-# Top Brands Web Application
-
-This is a web application to manage and display top-rated brands by country.
+A web application to manage and view top-rated brands by country.
 
 ## Features
 
-- Country detection using the `CF-IPCountry` header (Cloudflare)
-- Brand listing with fallback to Malta brands if none found
-- Brand CRUD operations through API
-- Mobile-friendly frontend with vanilla HTML/CSS/JS
+- CRUD functionality for brands
+- Country detection via `CF-IPCountry` header (Cloudflare)
+- Mobile-friendly UI with plain HTML/CSS/JS
+- RESTful API with Laravel
+- Dockerized environment with MySQL
 
-## Setup Instructions
+## Installation
 
-### Requirements
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/maurowelzel/brands-toplist.git
+   cd brands-toplist
+   ```
 
-- PHP >= 8.1
-- Composer
-- Laravel
-- Docker (optional)
+2. Copy the `.env` file and configure as needed:
+   ```bash
+   cp .env.example .env
+   ```
 
-### Installation
+3. Set your `APP_KEY`:
+   ```bash
+   php artisan key:generate
+   ```
 
-```bash
-git clone https://github.com/maurowelzel/brands-toplist.git
-cd top-brands
-composer install
-cp .env.example .env
-php artisan key:generate
-php artisan migrate
-php artisan serve
-```
+4. Set correct permissions (if needed).
 
-### API Endpoints
+## Docker Setup
 
-- `GET /api/brands` – Get brands filtered by country
-- `POST /api/brands` – Create brand
-- `PUT /api/brands/{id}` – Update brand
-- `DELETE /api/brands/{id}` – Delete brand
+1. Build and start the containers:
+   ```bash
+   docker-compose up -d --build
+   ```
 
-## Notes
+2. Install PHP dependencies (inside the container):
+   ```bash
+   docker exec -it app composer install
+   ```
 
-This app uses Cloudflare’s `CF-IPCountry` header to determine the user's country.
-If no brands are found for the detected country, it defaults to showing Malta brands.
+3. Run Laravel migrations:
+   ```bash
+   docker exec -it app php artisan migrate
+   ```
 
----
+## Folder Structure
 
-© 2025 Top Brands App
+- `/public`: frontend files (HTML/CSS/JS)
+- `/app/Http/Controllers/API`: API logic
+- `/routes/api.php`: API routes
+- `/database/migrations`: table definitions
+
+## API Endpoints
+
+- `GET /api/brands` – list brands by country
+- `GET /api/brands/all` – list all brands
+- `POST /api/brands` – create new brand
+- `PUT /api/brands/{id}` – update brand
+- `DELETE /api/brands/{id}` – delete brand
