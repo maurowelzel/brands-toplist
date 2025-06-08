@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<link rel="stylesheet" href="styles.css">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Top Brands CRUD</title>
+</head>
+
+<body>
+  <div id="app">
+    <h1>Top Brands CRUD</h1>
+
+    <label for="country-select">Select Country:</label>
+    <select id="country-select" aria-label="Select Country"></select>
+
+    <form id="brand-form" aria-label="Add or Edit Brand">
+      <input type="hidden" id="brand-id" />
+      <input type="text" id="brand-name" placeholder="Brand Name" required />
+      <input type="url" id="brand-image" placeholder="Brand Image URL" required />
+      <input type="number" id="brand-rating" placeholder="Rating (1-5)" min="1" max="5" required />
+      <button type="submit" id="submit-btn">Add Brand</button>
+    </form>
+  
+    <div id="brands-container" aria-live="polite" aria-relevant="additions removals"></div>
+  </div>
+  <script type="module">
+  import { countries } from './common.js';
+    (() => {
+
+      const countrySelect = document.getElementById('country-select');
+      const brandsContainer = document.getElementById('brands-container');
+      const brandForm = document.getElementById('brand-form');
+      const brandIdInput = document.getElementById('brand-id');
+      const brandNameInput = document.getElementById('brand-name');
+      const brandImageInput = document.getElementById('brand-image');
+      const brandRatingInput = document.getElementById('brand-rating');
+      const submitBtn = document.getElementById('submit-btn');
+
+      let brands = [];
+
+      function initCountryDropdown() {
+        countries.forEach(c => {
+          const option = document.createElement('option');
+          option.value = c.code;
+          option.textContent = c.name;
+          countrySelect.appendChild(option);
+        });
+        countrySelect.value = countries[0].code;
+      }
+
+      async function fetchBrands() {
+        const country = countrySelect.value;
+        try {
+          const res = await fetch('/api/brands', {
+            headers: { 'CF-IPCountry': country }
+          });
+          if (!res.ok) throw new Error(`Error fetching brands: ${res.status}`);
+          brands = await res.json();
+          renderBrands();
+        } catch (error) {
+          alert("Failed to load brands: " + error.message);
+        }
+      }
+
+      function renderBrands() {
+        brandsContainer.innerHTML = '';
+        if (brands.length === 0) {
+          brandsContainer.innerHTML = '<p>No brands found for this country.</p>';
+          return;
+        }
+
+        brands.forEach(brand => {
+          const card = document.createElement('div');
+          card.className = 'brand-card';
+
+          if (brand.isEditing) {
+            card.innerHTML = `
+              <div class="brand-info" style="flex: 1 1 100%;">
+                <input type="text" class="edit-input" data-field="brand_name" value="${escapeHtml(brand.brand_name)}" />
+                <input type="url" class="edit-input" data-field="brand_image" value="${escapeHtml(brand.brand_image)}" />
+                <input type="number" class="edit-input" data-field="rating" min="1" max="5" value="${brand.rating}" />
+              </div>
+              <div class="actions">
+                <button class="action-btn save-btn">Save</button>
+                <button class="action-btn cancel-btn">Cancel</button>
+              </div>
+            `;
+          } else {
+            card.innerHTML = `
+              <img src="${escapeHtml(brand.brand_image)}" alt="Brand image of ${escapeHtml(brand.brand_name)}" class="brand-image" />
+              <div class="brand-info">
+                <h3>${escapeHtml(brand.brand_name)}</h3>
+                <p>Rating: ${brand.rating}</p>
+              </div>
+              <div class="actions">
+                <button class="action-btn edit-btn">Edit</button>
+                <button class="action-btn delete-btn">Delete</button>
+              </div>
+            `;
+          }
+
+          if (brand.isEditing) {
+            card.querySelector('.save-btn').addEventListener('click', () => saveEdit(brand.brand_id, card));
+            card.querySelector('.cancel-btn').addEventListener('click', () => cancelEdit(brand.brand_id));
+          } else {
+            card.querySelector('.edit-btn').addEventListener('click', () => startEdit(brand.brand_id));
+            card.querySelector('.delete-btn').addEventListener('click', () => deleteBrand(brand.brand_id));
+          }
+
+          brandsContainer.appendChild(card);
+        });
+      }
+
+      function escapeHtml(text) {
+        return text
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      function startEdit(id) {
+        brands = brands.map(b => ({ ...b, isEditing: b.brand_id === id }));
+        renderBrands();
+      }
+
+      function cancelEdit(id) {
+        brands = brands.map(b => {
+          if (b.brand_id === id) {
+            const copy = { ...b };
+            delete copy.isEditing;
+            return copy;
+          }
+          return b;
+        });
+        renderBrands();
+      }
+
+      async function saveEdit(id, cardElement) {
+        const inputs = cardElement.querySelectorAll('.edit-input');
+        const updatedData = {};
+        inputs.forEach(input => {
+          const field = input.getAttribute('data-field');
+          let val = input.value.trim();
+          if (field === 'rating') val = parseInt(val, 10);
+          updatedData[field] = val;
+        });
+
+        if (!updatedData.brand_name || !updatedData.brand_image || isNaN(updatedData.rating) || updatedData.rating < 1 || updatedData.rating > 5) {
+          alert('Please fill all fields correctly.');
+          return;
+        }
+
+        try {
+          const res = await fetch(`/api/brands/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatedData)
+          });
+          if (!res.ok) throw new Error(`Failed to update brand: ${res.status}`);
+          const updatedBrand = await res.json();
+          brands = brands.map(b => (b.brand_id === id ? updatedBrand : b));
+          renderBrands();
+        } catch (error) {
+          alert(error.message);
+        }
+      }
+
+      async function deleteBrand(id) {
+        if (!confirm('Are you sure you want to delete this brand?')) return;
+        try {
+          const res = await fetch(`/api/brands/${id}`, { method: 'DELETE' });
+          if (!res.ok) throw new Error(`Failed to delete brand: ${res.status}`);
+          brands = brands.filter(b => b.brand_id !== id);
+          renderBrands();
+        } catch (error) {
+          alert(error.message);
+        }
+      }
+
+      brandForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = brandIdInput.value;
+        if (id) {
+          alert('Use inline editing for updates.');
+          return;
+        }
+
+        const newBrand = {
+          brand_name: brandNameInput.value.trim(),
+          brand_image: brandImageInput.value.trim(),
+          rating: parseInt(brandRatingInput.value.trim(), 10),
+          country_code: countrySelect.value
+        };
+        if (!newBrand.brand_name || !newBrand.brand_image || isNaN(newBrand.rating) || newBrand.rating < 1 || newBrand.rating > 5) {
+          alert('Please fill all fields correctly.');
+          return;
+        }
+
+        try {
+          const res = await fetch('/api/brands', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'CF-IPCountry': countrySelect.value
+            },
+            body: JSON.stringify(newBrand)
+          });
+          if (!res.ok) throw new Error(`Failed to create brand: ${res.status}`);
+          const createdBrand = await res.json();
+          brands.push(createdBrand);
+          renderBrands();
+          brandForm.reset();
+        } catch (error) {
+          alert("Error: " + error.message);
+        }
+      });
+
+      countrySelect.addEventListener('change', fetchBrands);
+      initCountryDropdown();
+      fetchBrands();
+    })();
+  </script>
+</body>
+
+</html>

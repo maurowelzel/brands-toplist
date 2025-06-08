@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<link rel="stylesheet" href="index.css">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Top Brands</title>
+</head>
+
+<body>
+  <h1>Top Brands</h1>
+  <div id="detected-country" class="loading">Detecting your country</div>
+  <select id="country-select" title="Select country"></select>
+  <div id="brands-container">Loading brands...</div>
+
+  <script type="module">
+    import { countries } from './common.js';
+
+    const countrySelect = document.getElementById('country-select');
+    const detectedCountryDiv = document.getElementById('detected-country');
+    const brandsContainer = document.getElementById('brands-container');
+
+    function initCountrySelect(detectedCode) {
+      countries.forEach(c => {
+        const option = document.createElement('option');
+        option.value = c.code;
+        option.textContent = c.name;
+        countrySelect.appendChild(option);
+      });
+      if (detectedCode && countries.find(c => c.code === detectedCode)) {
+        countrySelect.value = detectedCode;
+      } else {
+        countrySelect.value = countries[0].code;
+      }
+    }
+
+    async function fetchBrands(countryCode) {
+      detectedCountryDiv.classList.add('loading');
+      detectedCountryDiv.textContent = 'Detecting your country...';
+
+      try {
+        const res = await fetch('/api/brands', {
+          headers: { 'CF-IPCountry': countryCode }
+        });
+
+        if (!res.ok) throw new Error('Failed to load brands');
+        const brands = await res.json();
+
+        detectedCountryDiv.classList.remove('loading');
+        detectedCountryDiv.textContent = `Country detected: ${countryCode}`;
+
+        if (!brands.length) {
+          detectedCountryDiv.textContent =
+            `Country detected: ${countryCode} - Oops! No brands found for your country. Showing brands from Malta instead.`;
+
+          const fallbackRes = await fetch('/api/brands', {
+            headers: { 'CF-IPCountry': 'MT' }
+          });
+          if (!fallbackRes.ok) throw new Error('Failed to load fallback brands');
+          const fallbackBrands = await fallbackRes.json();
+          countrySelect.value = 'MT';
+          renderBrands(fallbackBrands);
+          return;
+        }
+
+        renderBrands(brands);
+      } catch (error) {
+        detectedCountryDiv.classList.remove('loading');
+        brandsContainer.innerHTML = `<p style="color:red;">${error.message}</p>`;
+      }
+    }
+
+    function renderBrands(brands) {
+      brandsContainer.innerHTML = '';
+      brands.forEach(brand => {
+        const card = document.createElement('div');
+        card.className = 'brand-card';
+        let stars = '';
+        for (let i = 0; i < brand.rating; i++) {
+          stars += '⭐';
+        }
+        card.innerHTML = `
+          <img src="${escapeHtml(brand.brand_image)}" alt="${escapeHtml(brand.brand_name)}" class="brand-image" />
+          <div class="brand-info">
+            <h3>${escapeHtml(brand.brand_name)}</h3>
+            <p>Rating: <span class="stars">${stars}</span></p>
+          </div>
+        `;
+        brandsContainer.appendChild(card);
+      });
+    }
+
+    function escapeHtml(text) {
+      return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    countrySelect.addEventListener('change', () => {
+      fetchBrands(countrySelect.value);
+    });
+
+    (async () => {
+      try {
+        const res = await fetch('/api/country');
+        if (!res.ok) throw new Error('Could not detect country');
+        const { country } = await res.json();
+
+        initCountrySelect(country);
+        fetchBrands(country);
+      } catch (e) {
+        console.error(e);
+        initCountrySelect('MT');
+        fetchBrands('MT');
+      }
+    })();
+  </script>
+</body>
+
+</html>
